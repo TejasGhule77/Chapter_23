@@ -1,6 +1,10 @@
-// Public project credentials only. Never put the service_role key here.
+// Chapter 23 Configuration
+// Connects to the Express & MongoDB backend API
 window.CHAPTER23_CONFIG = {
-  supabaseUrl: "YOUR_SUPABASE_PROJECT_URL",
-  supabaseAnonKey: "YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY",
-  currency: "INR"
+  apiBaseUrl: window.location.origin.includes(':5000')
+    ? '/api'
+    : (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+        ? 'http://localhost:5000/api'
+        : '/api'),
+  currency: 'INR'
 };
