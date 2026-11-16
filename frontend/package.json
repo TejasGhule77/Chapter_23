@@ -1,0 +1,16 @@
+{
+  "name": "chapter23-frontend",
+  "version": "2.0.0",
+  "description": "Chapter 23 — The Memory House Frontend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "chapter23",
+    "frontend"
+  ],
+  "author": "Chapter 23 Editorial",
+  "license": "ISC"
+}
