@@ -130,7 +130,10 @@
           localStorage.removeItem("c23_auth_token");
           updateHeaderState();
         }
-        return { data: null, error: resData.message || "An error occurred." };
+        const detailedErr = resData.hint
+          ? `${resData.message}: ${resData.hint}`
+          : (resData.message || resData.error || "An error occurred.");
+        return { data: null, error: detailedErr };
       }
 
       return { data: resData.data, error: null };
