@@ -75,20 +75,70 @@ app.use(async (req, res, next) => {
     try {
       await connectDatabase();
     } catch (err) {
-      console.error('[Database Middleware Error]', err.message);
-      return res.status(500).json({ success: false, message: 'Database connection error' });
+      console.error('[Database Middleware Error]', err);
+
+      const rawUri = (process.env.MONGODB_URI || config.MONGODB_URI || '').trim();
+      const isLocalhost = rawUri.includes('127.0.0.1') || rawUri.includes('localhost');
+      const isVercel = Boolean(process.env.VERCEL) || process.env.NODE_ENV === 'production';
+
+      let hint = 'Please check your MongoDB Atlas cluster and Network Access whitelist (0.0.0.0/0).';
+
+      if (isLocalhost && isVercel) {
+        hint = 'ACTION REQUIRED: MONGODB_URI environment variable is missing in your Vercel Project Settings! Vercel is attempting to connect to 127.0.0.1 (localhost) which does not exist in the cloud. Go to Vercel -> Settings -> Environment Variables, and add MONGODB_URI with your MongoDB Atlas connection string.';
+      } else if (err.message && (err.message.includes('bad auth') || err.message.includes('Authentication failed'))) {
+        hint = 'Authentication failed. Please verify your MongoDB Atlas username and password. If your password has special characters like @, #, or %, make sure they are URL-encoded (e.g. @ becomes %40).';
+      } else if (err.message && (err.message.includes('selection timed out') || err.message.includes('ETIMEDOUT'))) {
+        hint = 'Connection timed out. In MongoDB Atlas, navigate to Network Access -> click "Add IP Address" -> select "Allow Access from Anywhere" (0.0.0.0/0).';
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Database connection error',
+        error: err.message,
+        hint,
+        environment: config.NODE_ENV,
+        isVercel: Boolean(process.env.VERCEL),
+        timestamp: new Date().toISOString(),
+      });
     }
   }
   next();
 });
 
-// Health Check
-app.get('/api/health', (req, res) => {
+// Comprehensive Health & Database Diagnostic Check
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  let dbError = null;
+  const rawUri = (process.env.MONGODB_URI || config.MONGODB_URI || '').trim();
+  const isCloudUri = rawUri.startsWith('mongodb+srv://') || (!rawUri.includes('127.0.0.1') && !rawUri.includes('localhost'));
+
+  try {
+    const conn = await connectDatabase();
+    if (conn && conn.readyState === 1) {
+      dbStatus = 'connected';
+    }
+  } catch (err) {
+    dbStatus = 'failed';
+    dbError = err.message;
+  }
+
   res.json({
-    status: 'ok',
+    status: dbStatus === 'connected' ? 'ok' : 'degraded',
     service: 'Chapter 23 API',
-    timestamp: new Date().toISOString(),
+    database: {
+      status: dbStatus,
+      error: dbError,
+      isConfigured: Boolean(process.env.MONGODB_URI),
+      isCloudUri,
+      hint: dbStatus === 'connected'
+        ? 'MongoDB is connected and operational.'
+        : (!process.env.MONGODB_URI
+            ? 'Missing MONGODB_URI in Vercel. Go to Vercel Settings -> Environment Variables and add MONGODB_URI.'
+            : 'Check MongoDB Atlas Network Access: Ensure 0.0.0.0/0 is whitelisted and password credentials are correct.'),
+    },
     environment: config.NODE_ENV,
+    isVercel: Boolean(process.env.VERCEL),
+    timestamp: new Date().toISOString(),
   });
 });
 
