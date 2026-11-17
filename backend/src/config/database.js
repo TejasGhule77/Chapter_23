@@ -1,44 +1,47 @@
 const mongoose = require('mongoose');
 const config = require('./env');
 
-let isConnected = false;
+// Global cache for serverless environments (e.g. Vercel)
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
 
 async function connectDatabase(uriOverride) {
   const uri = uriOverride || config.MONGODB_URI;
 
-  if (isConnected && mongoose.connection.readyState === 1) {
-    return mongoose.connection;
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    const opts = {
+      autoIndex: true,
+      serverSelectionTimeoutMS: 5000,
+    };
+
+    cached.promise = mongoose.connect(uri, opts).then((m) => {
+      console.log(`[Database] MongoDB Connected successfully to: ${m.connection.host}/${m.connection.name}`);
+      return m;
+    });
   }
 
   try {
-    const conn = await mongoose.connect(uri, {
-      autoIndex: true, // Build indexes automatically in production / dev
-      serverSelectionTimeoutMS: 5000,
-    });
-
-    isConnected = true;
-    console.log(`[Database] MongoDB Connected successfully to: ${conn.connection.host}/${conn.connection.name}`);
-
-    mongoose.connection.on('error', (err) => {
-      console.error('[Database] MongoDB connection error:', err);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.warn('[Database] MongoDB disconnected. Attempting to reconnect...');
-      isConnected = false;
-    });
-
-    return conn;
+    cached.conn = await cached.promise;
   } catch (error) {
+    cached.promise = null;
     console.error('[Database] Failed to connect to MongoDB:', error.message);
     throw error;
   }
+
+  return cached.conn;
 }
 
 async function closeDatabase() {
-  if (isConnected) {
+  if (cached.conn) {
     await mongoose.connection.close();
-    isConnected = false;
+    cached.conn = null;
+    cached.promise = null;
     console.log('[Database] MongoDB connection closed.');
   }
 }
@@ -46,5 +49,5 @@ async function closeDatabase() {
 module.exports = {
   connectDatabase,
   closeDatabase,
-  mongoose
+  mongoose,
 };

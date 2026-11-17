@@ -69,6 +69,19 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Serve frontend statically if hosted together in production
 app.use(express.static(path.join(__dirname, '../../')));
 
+// Database auto-connection middleware for serverless (Vercel) & persistent environments
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api') && req.path !== '/api/health') {
+    try {
+      await connectDatabase();
+    } catch (err) {
+      console.error('[Database Middleware Error]', err.message);
+      return res.status(500).json({ success: false, message: 'Database connection error' });
+    }
+  }
+  next();
+});
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -126,4 +139,7 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, startServer };
+app.startServer = startServer;
+app.app = app;
+
+module.exports = app;
